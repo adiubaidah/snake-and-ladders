@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Snake and Ladder Game</title>
+    <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .game-board {
+            display: grid;
+            grid-template-columns: repeat(10, 1fr);
+            gap: 2px;
+            margin: 20px 0;
+        }
+        .cell {
+            width: 40px;
+            height: 40px;
+            border: 1px solid #ccc;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            background-color: #f9f9f9;
+        }
+        .player {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin: 1px;
+        }
+        .player1 { background-color: red; }
+        .player2 { background-color: blue; }
+        .player3 { background-color: green; }
+        .player4 { background-color: yellow; }
+        .controls {
+            margin: 20px 0;
+        }
+        .controls button {
+            padding: 10px 20px;
+            margin: 5px;
+            font-size: 16px;
+        }
+        .game-log {
+            height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            padding: 10px;
+            background-color: #f5f5f5;
+        }
+        .question-area {
+            margin: 20px 0;
+            padding: 20px;
+            border: 2px solid #007bff;
+            border-radius: 5px;
+            background-color: #e7f3ff;
+        }
+        .players-list {
+            margin: 20px 0;
+        }
+        input[type="text"] {
+            padding: 8px;
+            margin: 5px;
+            font-size: 14px;
+        }
+        .dice {
+            font-size: 48px;
+            margin: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Snake and Ladder Game</h1>
+    
+    <div id="join-section">
+        <h3>Join Game</h3>
+        <input type="text" id="playerName" placeholder="Enter your name" />
+        <button onclick="joinGame()">Join Game</button>
+    </div>
+
+    <div id="game-section" style="display: none;">
+        <div class="players-list">
+            <h3>Players:</h3>
+            <ul id="playersList"></ul>
+        </div>
+
+        <div class="controls">
+            <button id="startButton" onclick="startGame()" style="display: none;">Start Game</button>
+            <button id="shakeDiceButton" onclick="shakeDice()" style="display: none;">Shake Dice</button>
+            <div class="dice" id="diceDisplay">🎲</div>
+        </div>
+
+        <div class="question-area" id="questionArea" style="display: none;">
+            <h4>Question:</h4>
+            <p id="questionText"></p>
+            <div id="questionOptions"></div>
+        </div>
+
+        <div class="game-board" id="gameBoard"></div>
+
+        <div class="game-log">
+            <h4>Game Log:</h4>
+            <div id="gameLog"></div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io('http://localhost:3000');
+        let currentPlayer = null;
+        let gameState = null;
+
+        // Initialize game board
+        function initializeBoard() {
+            const board = document.getElementById('gameBoard');
+            board.innerHTML = '';
+            
+            // Create 100 cells (10x10 grid)
+            for (let i = 100; i >= 1; i--) {
+                const cell = document.createElement('div');
+                cell.className = 'cell';
+                cell.id = `cell-${i}`;
+                cell.textContent = i;
+                board.appendChild(cell);
+            }
+        }
+
+        function joinGame() {
+            const playerName = document.getElementById('playerName').value.trim();
+            if (!playerName) {
+                alert('Please enter your name');
+                return;
+            }
+            
+            socket.emit('join-game', { playerName });
+        }
+
+        function startGame() {
+            socket.emit('start-game');
+        }
+
+        function shakeDice() {
+            socket.emit('shake-dice');
+        }
+
+        function answerQuestion(answer) {
+            socket.emit('answer-question', { answer });
+        }
+
+        function updatePlayersList(players) {
+            const list = document.getElementById('playersList');
+            list.innerHTML = '';
+            players.forEach((player, index) => {
+                const li = document.createElement('li');
+                li.innerHTML = `${player.name} (Position: ${player.position}) ${player.isAdmin ? '[ADMIN]' : ''}`;
+                li.className = `player${index + 1}`;
+                list.appendChild(li);
+            });
+        }
+
+        function updateBoard(players) {
+            // Clear previous player positions
+            document.querySelectorAll('.player').forEach(p => p.remove());
+            
+            players.forEach((player, index) => {
+                if (player.position > 0) {
+                    const cell = document.getElementById(`cell-${player.position}`);
+                    if (cell) {
+                        const playerDiv = document.createElement('div');
+                        playerDiv.className = `player player${index + 1}`;
+                        playerDiv.style.left = `${(index * 10)}px`;
+                        cell.appendChild(playerDiv);
+                    }
+                }
+            });
+        }
+
+        function showQuestion(question) {
+            const questionArea = document.getElementById('questionArea');
+            const questionText = document.getElementById('questionText');
+            const questionOptions = document.getElementById('questionOptions');
+            
+            questionText.textContent = question.question;
+            questionOptions.innerHTML = '';
+            
+            if (question.options && question.options.length > 0) {
+                question.options.forEach(option => {
+                    const button = document.createElement('button');
+                    button.textContent = option;
+                    button.onclick = () => answerQuestion(option);
+                    button.style.margin = '5px';
+                    button.style.padding = '10px';
+                    questionOptions.appendChild(button);
+                });
+            } else {
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.placeholder = 'Enter your answer';
+                input.id = 'answerInput';
+                questionOptions.appendChild(input);
+                
+                const submitBtn = document.createElement('button');
+                submitBtn.textContent = 'Submit Answer';
+                submitBtn.onclick = () => {
+                    const answer = document.getElementById('answerInput').value;
+                    answerQuestion(answer);
+                };
+                questionOptions.appendChild(submitBtn);
+            }
+            
+            questionArea.style.display = 'block';
+        }
+
+        function hideQuestion() {
+            document.getElementById('questionArea').style.display = 'none';
+        }
+
+        function addLogMessage(message) {
+            const log = document.getElementById('gameLog');
+            const messageDiv = document.createElement('div');
+            messageDiv.textContent = `${new Date().toLocaleTimeString()}: ${message}`;
+            log.appendChild(messageDiv);
+            log.scrollTop = log.scrollHeight;
+        }
+
+        // Socket event listeners
+        socket.on('joined-game', (data) => {
+            currentPlayer = data;
+            document.getElementById('join-section').style.display = 'none';
+            document.getElementById('game-section').style.display = 'block';
+            
+            if (data.isAdmin) {
+                document.getElementById('startButton').style.display = 'inline-block';
+            }
+            
+            initializeBoard();
+            addLogMessage(`You joined as ${data.playerName}`);
+        });
+
+        socket.on('game-state-update', (state) => {
+            gameState = state;
+            updatePlayersList(state.players);
+            updateBoard(state.players);
+            
+            // Show/hide shake dice button
+            const shakeButton = document.getElementById('shakeDiceButton');
+            if (state.currentPlayer === currentPlayer?.playerName && !state.waitingForAnswer) {
+                shakeButton.style.display = 'inline-block';
+            } else {
+                shakeButton.style.display = 'none';
+            }
+            
+            // Show question if waiting for answer
+            if (state.waitingForAnswer && state.currentQuestion) {
+                showQuestion(state.currentQuestion);
+            } else {
+                hideQuestion();
+            }
+            
+            // Update dice display
+            if (state.diceValue > 0) {
+                document.getElementById('diceDisplay').textContent = state.diceValue;
+            }
+        });
+
+        socket.on('game-message', (data) => {
+            addLogMessage(data.message);
+        });
+
+        socket.on('error', (data) => {
+            alert(data.message);
+        });
+    </script>
+</body>
+</html>
