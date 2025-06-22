@@ -1,5 +1,8 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express from 'express';
-import { createServer } from 'http';
+import { createServer, type Server as ServerType } from 'http';
 import { Server } from 'socket.io';
 import { Client } from 'cassandra-driver';
 import { QuestionRepository } from './repositories/QuestionRepository';
@@ -8,7 +11,7 @@ import { QuestionController } from './controllers/QuestionController';
 import { GameManager } from './game/GameManager';
 
 const app = express();
-const server = createServer(app);
+const server: ServerType = createServer(app);
 const io = new Server(server, {
   cors: {
     origin: "*",
@@ -33,11 +36,15 @@ const questionService = new QuestionService(questionRepository);
 const questionController = new QuestionController(questionService);
 const gameManager = new GameManager(io, questionService);
 
-io.on('connection', (socket: any) => {
+io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
   
   socket.on('join-game', ({ playerName }: { playerName: string }) => {
-    gameManager.addPlayer(socket, playerName);
+    if (playerName !== process.env.ADMIN_USERNAME) {
+      gameManager.addPlayer(socket, playerName);
+    } else {
+      gameManager.adminJoin(socket)
+    }
   });
 
   socket.on('start-game', () => {

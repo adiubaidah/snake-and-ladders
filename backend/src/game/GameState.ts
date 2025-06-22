@@ -1,16 +1,10 @@
 import { Player } from './Player';
+import { Question } from 'models/Question';
 
 export enum GameStatus {
   WAITING = 'waiting',
   IN_PROGRESS = 'in_progress',
   FINISHED = 'finished'
-}
-
-export interface Question {
-  id: string;
-  question: string;
-  options: string[];
-  correctAnswer: string;
 }
 
 export class GameState {
@@ -123,7 +117,6 @@ export class GameState {
         id: p.id,
         name: p.name,
         position: p.position,
-        isAdmin: p.isAdmin
       })),
       currentPlayer: this.getCurrentPlayer()?.name || null,
       currentQuestion: this.currentQuestion,

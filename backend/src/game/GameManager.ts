@@ -1,6 +1,15 @@
-import { QuestionService } from '../services/QuestionService';
-import { Player } from './Player';
-import { GameState } from './GameState';
+import { Socket, DefaultEventsMap } from "socket.io";
+import { QuestionService } from "../services/QuestionService";
+import { Player } from "./Player";
+import { GameState } from "./GameState";
+
+type GameMessage = {
+  type: string;
+  playerName?: string;
+  playerId?: string;
+  timestamp: string;
+  [key: string]: any;
+}
 
 export class GameManager {
   private io: any;
@@ -13,46 +22,64 @@ export class GameManager {
     this.gameState = new GameState();
   }
 
-  public async addPlayer(socket: any, playerName: string): Promise<void> {
-    const isAdmin = this.gameState.players.size === 0; // First player is admin
-    const player = new Player(socket.id, playerName, isAdmin);
-    
+  public async adminJoin(
+    socket: Socket<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, any>
+  ): Promise<void> {
+    socket.join("game-room");
+    socket.emit("admin-joined", {
+      message: "Admin joined the game",
+    });
+  }
+
+  public async addPlayer(
+    socket: Socket<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, any>,
+    playerName: string
+  ): Promise<void> {
+    const player = new Player(socket.id, playerName);
+
     this.gameState.addPlayer(player);
-    
-    socket.join('game-room');
-    
-    this.broadcastMessage(`${playerName} joined the game`);
+
+    socket.join("game-room");
+
+    this.broadcastMessage({
+      type: "PLAYER_JOINED",
+      playerName: playerName,
+      playerId: player.id
+    });
     this.broadcastGameState();
-    
-    socket.emit('joined-game', {
+
+    socket.emit("joined-game", {
       playerId: player.id,
       playerName: player.name,
-      isAdmin: player.isAdmin
     });
   }
 
   public removePlayer(socket: any): void {
     const player = this.gameState.players.get(socket.id);
     if (!player) return;
-    
+
     this.gameState.removePlayer(socket.id);
-    this.broadcastMessage(`${player.name} left the game`);
+    this.broadcastMessage({
+      type: "PLAYER_LEFT",
+      playerName: player.name,
+      playerId: player.id
+    });
     this.broadcastGameState();
   }
+
   public startGame(socket: any): void {
-    const player = this.gameState.players.get(socket.id);
-    if (!player || !player.isAdmin) {
-      socket.emit('error', { message: 'Only admin can start the game' });
-      return;
-    }
-    
     if (this.gameState.players.size < 2) {
-      socket.emit('error', { message: 'Need at least 2 players to start' });
+      socket.emit("game-error", {
+        message: "Need at least 2 players to start",
+      });
       return;
     }
-    
+
     this.gameState.startGame();
-    this.broadcastMessage('Game Started');
+    this.broadcastMessage({
+      type: "GAME_STARTED",
+      playerCount: this.gameState.players.size
+    });
     this.broadcastGameState();
     this.startPlayerTurn();
   }
@@ -60,22 +87,32 @@ export class GameManager {
   public shakeDice(socket: any): void {
     const currentPlayer = this.gameState.getCurrentPlayer();
     if (!currentPlayer || currentPlayer.id !== socket.id) {
-      socket.emit('error', { message: 'Not your turn' });
+      socket.emit("game-error", { message: "Not your turn" });
       return;
     }
-    
+
     if (this.gameState.waitingForAnswer) {
-      socket.emit('error', { message: 'Already shook dice, answer the question' });
+      socket.emit("game-error", {
+        message: "Already shook dice, answer the question",
+      });
       return;
     }
-    
+
     const diceValue = this.gameState.rollDice();
-    
-    this.broadcastMessage(`${currentPlayer.name} shaking dice`);
-    
-    // Simulate dice animation delay
+
+    this.broadcastMessage({
+      type: "DICE_SHAKING",
+      playerName: currentPlayer.name,
+      playerId: currentPlayer.id
+    });
+
     setTimeout(() => {
-      this.broadcastMessage(`${currentPlayer.name} got ${diceValue}`);
+      this.broadcastMessage({
+        type: "DICE_ROLLED",
+        playerName: currentPlayer.name,
+        playerId: currentPlayer.id,
+        diceValue: diceValue
+      });
       this.presentQuestion();
     }, 1000);
   }
@@ -83,80 +120,132 @@ export class GameManager {
   public async answerQuestion(socket: any, answer: string): Promise<void> {
     const currentPlayer = this.gameState.getCurrentPlayer();
     if (!currentPlayer || currentPlayer.id !== socket.id) {
-      socket.emit('error', { message: 'Not your turn' });
+      socket.emit("game-error", { message: "Not your turn" });
       return;
     }
-    
+
     if (!this.gameState.waitingForAnswer || !this.gameState.currentQuestion) {
-      socket.emit('error', { message: 'No question to answer' });
+      socket.emit("game-error", { message: "No question to answer" });
       return;
     }
-    
-    const isCorrect = answer === this.gameState.currentQuestion.correctAnswer;
-    
+    const correctAnswer = Array.from(
+      this.gameState.currentQuestion.answers.entries()
+    ).find(([_, value]) => value === true)?.[0];
+    const isCorrect = answer === correctAnswer;
+
+    this.broadcastMessage({
+      type: "ANSWER_VALIDATED",
+      playerName: currentPlayer.name,
+      playerId: currentPlayer.id,
+      isCorrect: isCorrect,
+      selectedAnswer: answer,
+      correctAnswer: correctAnswer
+    });
+
     if (isCorrect) {
-      this.broadcastMessage(`${currentPlayer.name} answered correctly`);
       this.movePlayerWithAnimation(currentPlayer, this.gameState.diceValue);
     } else {
-      this.broadcastMessage(`${currentPlayer.name} answered wrong`);
-      this.broadcastMessage(`${currentPlayer.name} stay`);
-      
+      this.broadcastMessage({
+        type: "PLAYER_STAYS",
+        playerName: currentPlayer.name,
+        playerId: currentPlayer.id,
+        reason: "WRONG_ANSWER"
+      });
+
       setTimeout(() => {
         this.nextTurn();
       }, 2000);
     }
   }
+
   private async presentQuestion(): Promise<void> {
     try {
       const questions = await this.questionService.getAllQuestions();
       if (questions.length === 0) return;
-        const randomQuestion = questions[Math.floor(Math.random() * questions.length)] as any;
-      
-      const question = {
-        id: randomQuestion.id,
-        question: randomQuestion.text || randomQuestion.question_text || randomQuestion.content || 'Question text missing',
-        options: randomQuestion.options || randomQuestion.choices || [],
-        correctAnswer: randomQuestion.correct_answer || randomQuestion.answer || ''
-      };
-      
-      this.gameState.setQuestion(question);
-      
-      this.broadcastMessage(`${this.gameState.getCurrentPlayer()?.name} got question: ${question.question}`);
+      const randomQuestion =
+        questions[Math.floor(Math.random() * questions.length)];
+
+      this.gameState.setQuestion(randomQuestion);
+
+      this.broadcastMessage({
+        type: "QUESTION_PRESENTED",
+        playerName: this.gameState.getCurrentPlayer()?.name,
+        playerId: this.gameState.getCurrentPlayer()?.id,
+        question: {
+          id: randomQuestion.id,
+          text: randomQuestion.question_text,
+          answers: Array.from(randomQuestion.answers.entries()).map(
+            ([key, _]) => key
+),
+        },
+      });
       this.broadcastGameState();
     } catch (error) {
-      console.error('Error getting question:', error);
+      console.error("Error getting question:", error);
     }
   }
 
   private movePlayerWithAnimation(player: Player, steps: number): void {
     const path = this.gameState.movePlayer(player, steps);
     let stepIndex = 0;
-    
+
     const animateStep = () => {
       if (stepIndex < path.length) {
         const position = path[stepIndex];
-        this.broadcastMessage(`${player.name} step ${position}`);
+        this.broadcastMessage({
+          type: "PLAYER_STEPPING",
+          playerName: player.name,
+          playerId: player.id,
+          stepNumber: stepIndex + 1,
+          totalSteps: path.length,
+          currentPosition: position
+        });
         stepIndex++;
-        
+
         setTimeout(animateStep, 500); // 500ms delay between steps
       } else {
         // Animation complete
         const finalPosition = player.position;
-        this.broadcastMessage(`${player.name} stepped at ${finalPosition}`);
-        
+        this.broadcastMessage({
+          type: "PLAYER_MOVED",
+          playerName: player.name,
+          playerId: player.id,
+          finalPosition: finalPosition,
+          stepsCount: steps
+        });
+
         // Check for ladder or snake
         if (this.gameState.ladders.has(finalPosition)) {
-          this.broadcastMessage(`${player.name} climbing up ladder`);
-          this.broadcastMessage(`${player.name} stepped at ${player.position}`);
+          this.broadcastMessage({
+            type: "LADDER_CLIMBED",
+            playerName: player.name,
+            playerId: player.id,
+            fromPosition: finalPosition,
+            toPosition: player.position
+          });
         } else if (this.gameState.snakes.has(finalPosition)) {
-          this.broadcastMessage(`${player.name} sliding down snake`);
-          this.broadcastMessage(`${player.name} stepped at ${player.position}`);
+          this.broadcastMessage({
+            type: "SNAKE_SLID",
+            playerName: player.name,
+            playerId: player.id,
+            fromPosition: finalPosition,
+            toPosition: player.position
+          });
         }
-        
+
         // Check for winner
         if (this.gameState.checkWinner(player)) {
-          this.broadcastMessage(`${player.name} reached finish`);
-          this.broadcastMessage(`${player.name} wins the game!`);
+          this.broadcastMessage({
+            type: "GAME_FINISHED",
+            playerName: player.name,
+            playerId: player.id,
+            finalPosition: player.position
+          });
+          this.broadcastMessage({
+            type: "WINNER_ANNOUNCED",
+            playerName: player.name,
+            playerId: player.id
+          });
           this.broadcastGameState();
         } else {
           setTimeout(() => {
@@ -165,15 +254,20 @@ export class GameManager {
         }
       }
     };
-    
+
     animateStep();
   }
 
   private startPlayerTurn(): void {
     const currentPlayer = this.gameState.getCurrentPlayer();
     if (!currentPlayer) return;
-    
-    this.broadcastMessage(`${currentPlayer.name} turn`);
+
+    this.broadcastMessage({
+      type: "TURN_STARTED",
+      playerName: currentPlayer.name,
+      playerId: currentPlayer.id,
+      currentPosition: currentPlayer.position
+    });
     this.broadcastGameState();
   }
 
@@ -182,14 +276,18 @@ export class GameManager {
     this.startPlayerTurn();
   }
 
-  private broadcastMessage(message: string): void {
-    this.io.to('game-room').emit('game-message', {
-      message,
-      timestamp: new Date().toISOString()
-    });
+  private broadcastMessage(messageData: Omit<GameMessage, 'timestamp' | 'type'> & { type: string }): void {
+    const message: GameMessage = {
+      ...messageData,
+      timestamp: new Date().toISOString(),
+    };
+    
+    this.io.to("game-room").emit("game-message", message);
   }
 
   private broadcastGameState(): void {
-    this.io.to('game-room').emit('game-state-update', this.gameState.getGameStateForClient());
+    this.io
+      .to("game-room")
+      .emit("game-state-update", this.gameState.getGameStateForClient());
   }
 }

@@ -2,13 +2,11 @@ export class Player {
   public id: string;
   public name: string;
   public position: number;
-  public isAdmin: boolean;
 
-  constructor(socketId: string, name: string, isAdmin: boolean = false) {
+  constructor(socketId: string, name: string) {
     this.id = socketId;
     this.name = name;
     this.position = 0;
-    this.isAdmin = isAdmin;
   }
 
   public moveToPosition(newPosition: number): void {
