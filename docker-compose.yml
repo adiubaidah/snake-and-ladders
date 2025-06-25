@@ -3,18 +3,40 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: snake-laddders-backend
+    container_name: snake-ladders-backend
     restart: always
     ports:
-      - "8000:8000"
+      - "8000:3000"
     env_file:
       - ./backend/.env
+    depends_on:
+      - cassandra
+    networks:
+      - snake-ladder-net
   
   cassandra:
-    image: casssandra:5.0
+    image: cassandra:5.0
     container_name: cassandra
     restart: always
     ports:
       - "9042:9042"
     volumes:
       - cassandra_data:/var/lib/cassandra
+    environment:
+      - CASSANDRA_CLUSTER_NAME=Test Cluster
+      - CASSANDRA_DC=datacenter1
+      - CASSANDRA_RACK=rack1
+    networks:
+      - snake-ladder-net
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'DESCRIBE KEYSPACES'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+volumes:
+  cassandra_data:
+
+networks:
+  snake-ladder-net:
+    driver: bridge
