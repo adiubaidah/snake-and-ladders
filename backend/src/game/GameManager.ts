@@ -9,7 +9,7 @@ type GameMessage = {
   playerId?: string;
   timestamp: string;
   [key: string]: any;
-}
+};
 
 export class GameManager {
   private io: any;
@@ -43,15 +43,11 @@ export class GameManager {
 
     this.broadcastMessage({
       type: "PLAYER_JOINED",
-      playerName: playerName,
-      playerId: player.id
+      player: player.getInfo(),
     });
     this.broadcastGameState();
 
-    socket.emit("joined-game", {
-      playerId: player.id,
-      playerName: player.name,
-    });
+    socket.emit("joined-game" , player.getInfo());
   }
 
   public removePlayer(socket: any): void {
@@ -61,8 +57,7 @@ export class GameManager {
     this.gameState.removePlayer(socket.id);
     this.broadcastMessage({
       type: "PLAYER_LEFT",
-      playerName: player.name,
-      playerId: player.id
+      player: player.getInfo(),
     });
     this.broadcastGameState();
   }
@@ -78,7 +73,7 @@ export class GameManager {
     this.gameState.startGame();
     this.broadcastMessage({
       type: "GAME_STARTED",
-      playerCount: this.gameState.players.size
+      playerCount: this.gameState.players.size,
     });
     this.broadcastGameState();
     this.startPlayerTurn();
@@ -102,16 +97,14 @@ export class GameManager {
 
     this.broadcastMessage({
       type: "DICE_SHAKING",
-      playerName: currentPlayer.name,
-      playerId: currentPlayer.id
+      player: currentPlayer.getInfo(),
     });
 
     setTimeout(() => {
       this.broadcastMessage({
         type: "DICE_ROLLED",
-        playerName: currentPlayer.name,
-        playerId: currentPlayer.id,
-        diceValue: diceValue
+        player: currentPlayer.getInfo(),
+        diceValue: diceValue,
       });
       this.presentQuestion();
     }, 1000);
@@ -135,11 +128,10 @@ export class GameManager {
 
     this.broadcastMessage({
       type: "ANSWER_VALIDATED",
-      playerName: currentPlayer.name,
-      playerId: currentPlayer.id,
+      player: currentPlayer.getInfo(),
       isCorrect: isCorrect,
       selectedAnswer: answer,
-      correctAnswer: correctAnswer
+      correctAnswer: correctAnswer,
     });
 
     if (isCorrect) {
@@ -147,9 +139,9 @@ export class GameManager {
     } else {
       this.broadcastMessage({
         type: "PLAYER_STAYS",
-        playerName: currentPlayer.name,
+        player: currentPlayer.getInfo(),
         playerId: currentPlayer.id,
-        reason: "WRONG_ANSWER"
+        reason: "WRONG_ANSWER",
       });
 
       setTimeout(() => {
@@ -169,14 +161,13 @@ export class GameManager {
 
       this.broadcastMessage({
         type: "QUESTION_PRESENTED",
-        playerName: this.gameState.getCurrentPlayer()?.name,
-        playerId: this.gameState.getCurrentPlayer()?.id,
+        player: this.gameState.getCurrentPlayer()?.getInfo(),
         question: {
           id: randomQuestion.id,
           text: randomQuestion.question_text,
           answers: Array.from(randomQuestion.answers.entries()).map(
             ([key, _]) => key
-),
+          ),
         },
       });
       this.broadcastGameState();
@@ -194,11 +185,10 @@ export class GameManager {
         const position = path[stepIndex];
         this.broadcastMessage({
           type: "PLAYER_STEPPING",
-          playerName: player.name,
-          playerId: player.id,
+          player: player.getInfo(),
           stepNumber: stepIndex + 1,
           totalSteps: path.length,
-          currentPosition: position
+          currentPosition: position,
         });
         stepIndex++;
 
@@ -208,28 +198,25 @@ export class GameManager {
         const finalPosition = player.position;
         this.broadcastMessage({
           type: "PLAYER_MOVED",
-          playerName: player.name,
-          playerId: player.id,
+          player: player.getInfo(),
           finalPosition: finalPosition,
-          stepsCount: steps
+          stepsCount: steps,
         });
 
         // Check for ladder or snake
         if (this.gameState.ladders.has(finalPosition)) {
           this.broadcastMessage({
             type: "LADDER_CLIMBED",
-            playerName: player.name,
-            playerId: player.id,
+            player: player.getInfo(),
             fromPosition: finalPosition,
-            toPosition: player.position
+            toPosition: player.position,
           });
         } else if (this.gameState.snakes.has(finalPosition)) {
           this.broadcastMessage({
             type: "SNAKE_SLID",
-            playerName: player.name,
-            playerId: player.id,
+            player: player.getInfo(),
             fromPosition: finalPosition,
-            toPosition: player.position
+            toPosition: player.position,
           });
         }
 
@@ -237,14 +224,12 @@ export class GameManager {
         if (this.gameState.checkWinner(player)) {
           this.broadcastMessage({
             type: "GAME_FINISHED",
-            playerName: player.name,
-            playerId: player.id,
-            finalPosition: player.position
+            player: player.getInfo(),
+            finalPosition: player.position,
           });
           this.broadcastMessage({
             type: "WINNER_ANNOUNCED",
-            playerName: player.name,
-            playerId: player.id
+            player: player.getInfo(),
           });
           this.broadcastGameState();
         } else {
@@ -264,9 +249,8 @@ export class GameManager {
 
     this.broadcastMessage({
       type: "TURN_STARTED",
-      playerName: currentPlayer.name,
-      playerId: currentPlayer.id,
-      currentPosition: currentPlayer.position
+      player: currentPlayer.getInfo(),
+      currentPosition: currentPlayer.position,
     });
     this.broadcastGameState();
   }
@@ -276,12 +260,14 @@ export class GameManager {
     this.startPlayerTurn();
   }
 
-  private broadcastMessage(messageData: Omit<GameMessage, 'timestamp' | 'type'> & { type: string }): void {
+  private broadcastMessage(
+    messageData: Omit<GameMessage, "timestamp" | "type"> & { type: string }
+  ): void {
     const message: GameMessage = {
       ...messageData,
       timestamp: new Date().toISOString(),
     };
-    
+
     this.io.to("game-room").emit("game-message", message);
   }
 
