@@ -60,6 +60,10 @@ io.on("connection", (socket) => {
     gameManager.startGame(socket);
   });
 
+  socket.on("restart-game", () => {
+    gameManager.restartGame(socket);
+  })
+
   socket.on("shake-dice", () => {
     gameManager.shakeDice(socket);
   });

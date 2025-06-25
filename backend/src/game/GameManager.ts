@@ -79,6 +79,19 @@ export class GameManager {
     this.startPlayerTurn();
   }
 
+  public restartGame(socket: any): void {
+    this.broadcastMessage({
+      type: "GAME_RESTARTED",
+      message: "Game has been restarted by admin",
+    });
+
+    this.io.to("game-room").disconnectSockets();
+
+    this.gameState = new GameState();
+
+    this.broadcastGameState();
+  }
+
   public shakeDice(socket: any): void {
     const currentPlayer = this.gameState.getCurrentPlayer();
     if (!currentPlayer || currentPlayer.id !== socket.id) {
@@ -247,11 +260,21 @@ export class GameManager {
     const currentPlayer = this.gameState.getCurrentPlayer();
     if (!currentPlayer) return;
 
+    // Broadcast to all players that a turn has started
     this.broadcastMessage({
       type: "TURN_STARTED",
       player: currentPlayer.getInfo(),
       currentPosition: currentPlayer.position,
     });
+
+    // Send specific message to the current player
+    this.io.to(currentPlayer.id).emit("game-message", {
+      type: "YOUR_TURN",
+      player: currentPlayer.getInfo(),
+      message: "It's your turn! Roll the dice.",
+      timestamp: new Date().toISOString(),
+    });
+
     this.broadcastGameState();
   }
 
