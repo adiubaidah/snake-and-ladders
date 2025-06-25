@@ -9,6 +9,7 @@ import { Client } from "cassandra-driver";
 import { QuestionRepository } from "./repositories/QuestionRepository";
 import { QuestionService } from "./services/QuestionService";
 import { QuestionController } from "./controllers/QuestionController";
+import { GameController } from "./controllers/GameController";
 import { GameManager } from "./game/GameManager";
 
 const app = express();
@@ -42,6 +43,7 @@ const questionRepository = new QuestionRepository(client);
 const questionService = new QuestionService(questionRepository);
 const questionController = new QuestionController(questionService);
 const gameManager = new GameManager(io, questionService);
+const gameController = new GameController(gameManager);
 
 io.on("connection", (socket) => {
   console.log("User connected:", socket.id);
@@ -88,10 +90,13 @@ app.delete("/questions/:id", (req, res) =>
   questionController.deleteQuestion(req, res)
 );
 
-// Serve the game client
-app.get("/game", (req, res) => {
-  res.sendFile(__dirname + "/../../frontend/game.html");
-});
+// Game plot endpoints
+app.get("/game/board", (req, res) =>
+  gameController.getGameBoard(req, res)
+);
+app.get("/game/plot", (req, res) =>
+  gameController.getGamePlot(req, res)
+);
 
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || "0.0.0.0";
