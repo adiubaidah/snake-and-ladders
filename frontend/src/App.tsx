@@ -4,33 +4,35 @@ import ReactQuery from "./provider/react-query";
 import SocketProvider from "./provider/socket";
 
 const Question = lazy(() => import("./pages/question/question"));
+const Game = lazy(() => import("./pages/game/index"));
 import StartGame from "@/pages/admin/start-game";
 
 function App() {
   return (
     <ReactQuery>
-      <Router>
-        <Routes>
-          <Route
-            path="/pertanyaan"
-            element={
-              <Suspense fallback={<div>Loading...</div>}>
-                <Question />
-              </Suspense>
-            }
-          />
-          <Route
-            path="/admin/mulai"
-            element={
-              <Suspense fallback={<div>Loading...</div>}>
+      <Suspense fallback={<div>Loading...</div>}>
+        <Router>
+          <Routes>
+            <Route
+              path="/game"
+              element={
                 <SocketProvider>
-                  <StartGame />s
+                  <Game />
                 </SocketProvider>
-              </Suspense>
-            }
-          />
-        </Routes>
-      </Router>
+              }
+            />
+            <Route path="/pertanyaan" element={<Question />} />
+            <Route
+              path="/admin/mulai"
+              element={
+                <SocketProvider>
+                  <StartGame />
+                </SocketProvider>
+              }
+            />
+          </Routes>
+        </Router>
+      </Suspense>
     </ReactQuery>
   );
 }

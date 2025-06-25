@@ -69,13 +69,17 @@ export class GameController {
             description: `Ladder from ${bottom} to ${top}`
           }))
         },
-        players: gameState.players.map(player => ({
-          id: player.id,
-          name: player.name,
-          position: player.position,
-          coordinates: this.getSquareCoordinates(player.position),
-          isCurrentPlayer: player.name === gameState.currentPlayer,
-        })),
+        players: Array.from(this.gameManager['gameState'].players.values()).map(player => {
+          const playerInfo = player.getInfo();
+          return {
+            id: playerInfo.id,
+            name: playerInfo.name,
+            position: playerInfo.position,
+            coordinates: this.getSquareCoordinates(playerInfo.position),
+            isCurrentPlayer: playerInfo.name === gameState.currentPlayer,
+            color: playerInfo.color
+          };
+        }),
         gameInfo: {
           status: gameState.status,
           currentPlayer: gameState.currentPlayer,

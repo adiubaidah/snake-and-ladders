@@ -18,7 +18,7 @@ export class GameState {
   public winner: Player | null = null;
   
   public ladders: Map<number, number> = new Map([
-    [4, 14], [9, 31], [17, 7], [20, 38], [28, 84], [40, 59], [51, 67], [63, 81], [71, 91]
+    [4, 14], [9, 31], [7, 17], [20, 38], [28, 84], [40, 59], [51, 67], [63, 81], [71, 91]
   ]);
   
   public snakes: Map<number, number> = new Map([
