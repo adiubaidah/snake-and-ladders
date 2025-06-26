@@ -101,6 +101,7 @@ app.get("/game/board", (req, res) =>
 app.get("/game/plot", (req, res) =>
   gameController.getGamePlot(req, res)
 );
+app.get("/game/players", gameController.getPlayers);
 
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || "0.0.0.0";

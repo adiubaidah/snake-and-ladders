@@ -7,80 +7,133 @@ import GameAreaComponent from "@/components/game/area";
 import Leaderboard from "@/components/game/leaderboard";
 import GameControls from "@/components/game/game-controls";
 import useGameArea from "@/hooks/use-game-area";
+import usePlayers from "@/hooks/user-players";
 import JoinGame from "./join-game";
 import useCurrentPlayer from "@/hooks/use-current-player";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 function Index() {
-  
-  const {player: currentPlayer} = useCurrentPlayer()
+  const { player: currentPlayer } = useCurrentPlayer();
   const [isQuestionOpen, setIsQuestionOpen] = useState(false);
-  const [gameMessages, setGameMessages] = useState<Array<{type: string, player: Player, timestamp: string}>>([]);
-  const [currentQuestion, setCurrentQuestion] = useState<{id: string, text: string, answers: string[]} | null>(null);
-  const [currentTurnPlayer, setCurrentTurnPlayer] = useState<Player | null>(null);
+  const [gameMessages, setGameMessages] = useState<
+    Array<{ type: string; player: Player; timestamp: string }>
+  >([]);
+  const [currentQuestion, setCurrentQuestion] = useState<{
+    id: string;
+    text: string;
+    answers: string[];
+  } | null>(null);
+  const [currentTurnPlayer, setCurrentTurnPlayer] = useState<Player | null>(
+    null
+  );
   const [isDiceShaking, setIsDiceShaking] = useState(false);
   const [diceValue, setDiceValue] = useState<number | null>(null);
   const [canRollDice, setCanRollDice] = useState(false);
   const { data: gameBoard, isLoading } = useGameArea();
   const { isConnected, socket } = useContext(SocketContext);
 
+  const { refetchPlayers } = usePlayers({
+    refetchOnWindowFocus: false,
+  });
 
-   useEffect(() => {
+  useEffect(() => {
     if (isConnected && socket) {
-      socket.on("game-message", (data: {type: string, player: Player, timestamp: string, question?: {id: string, text: string, answers: string[]}, currentPosition?: number, message?: string, diceValue?: number, isCorrect?: boolean, selectedAnswer?: string, correctAnswer?: string}) => {
-        // Add all messages to the leaderboard
-        setGameMessages(prev => [...prev, data]);
+      const eventsRequiringRefresh = [
+        "PLAYER_MOVED",
+        "SNAKE_SLID",
+        "LADDER_CLIMBED",
+        "PLAYER_JOINED",
+        "PLAYER_LEFT",
+        "GAME_STARTED",
+        "GAME_RESTARTED",
+      ];
 
-        // Handle specific game events
-        switch (data.type) {
-          case 'TURN_STARTED':
-            setCurrentTurnPlayer(data.player);
-            setIsDiceShaking(false);
-            setDiceValue(null);
-            setCanRollDice(false);
-            break;
-            
-          case 'YOUR_TURN':
-            setCurrentTurnPlayer(data.player);
-            setCanRollDice(true);
-            break;
-            
-          case 'DICE_SHAKING':
-            setIsDiceShaking(true);
-            setDiceValue(null);
-            setCanRollDice(false);
-            break;
-            
-          case 'DICE_ROLLED':
-            setIsDiceShaking(false);
-            setDiceValue(data.diceValue || null);
-            break;
-            
-          case 'QUESTION_PRESENTED':
-            if (data.question) {
-              setCurrentQuestion(data.question);
-              // Only show alert dialog for current player
-              if (data.player.id === currentPlayer?.id) {
-                setIsQuestionOpen(true);
-              }
-            }
-            break;
-            
-          case 'ANSWER_VALIDATED':
-            setIsQuestionOpen(false);
-            setCurrentQuestion(null);
-            break;
-            
-          case 'PLAYER_MOVED':
-          case 'PLAYER_STAYS':
-            // Reset dice state after movement
-            setTimeout(() => {
+      socket.on(
+        "game-message",
+        (data: {
+          type: string;
+          player: Player;
+          timestamp: string;
+          question?: { id: string; text: string; answers: string[] };
+          currentPosition?: number;
+          message?: string;
+          diceValue?: number;
+          isCorrect?: boolean;
+          selectedAnswer?: string;
+          correctAnswer?: string;
+        }) => {
+          // Add all messages to the leaderboard
+          setGameMessages((prev) => [...prev, data]);
+
+          // Handle specific game events
+          switch (data.type) {
+            case "TURN_STARTED":
+              setCurrentTurnPlayer(data.player);
+              console.log("turns started for", data.player);
               setIsDiceShaking(false);
               setDiceValue(null);
               setCanRollDice(false);
-            }, 2000);
-            break;
+              break;
+
+            case "YOUR_TURN":
+              setTimeout(() => {
+                setCanRollDice(true);
+              }, 100);
+              break;
+
+            case "DICE_SHAKING":
+              setIsDiceShaking(true);
+              setDiceValue(null);
+              setCanRollDice(false);
+              break;
+
+            case "DICE_ROLLED":
+              setIsDiceShaking(false);
+              setDiceValue(data.diceValue || null);
+              break;
+
+            case "QUESTION_PRESENTED":
+              if (data.question) {
+                setCurrentQuestion(data.question);
+                // Only show alert dialog for current player
+                console.log(data.player, currentPlayer);
+                if (data.player.id === currentPlayer?.id) {
+                  setIsQuestionOpen(true);
+                }
+              }
+              break;
+
+            case "ANSWER_VALIDATED":
+              setIsQuestionOpen(false);
+              setCurrentQuestion(null);
+              break;
+            case "PLAYER_STEPPING":
+              console.log("Player stepping received:", data);
+              break;
+            case "PLAYER_MOVED":
+              refetchPlayers();
+              break;
+            case "PLAYER_STAYS":
+              setTimeout(() => {
+                setIsDiceShaking(false);
+                setDiceValue(null);
+                setCanRollDice(false);
+              }, 2000);
+              break;
+          }
+          if (eventsRequiringRefresh.includes(data.type)) {
+            setTimeout(() => {
+              refetchPlayers();
+            }, 500);
+          }
         }
-      });
+      );
     }
 
     return () => {
@@ -89,29 +142,51 @@ function Index() {
         socket.off("game-message");
       }
     };
-  }, [isConnected, socket]);
+  }, [isConnected, socket, currentPlayer, refetchPlayers]);
 
-
-
-  // const handleAnswerQuestion = (answer: string) => {
-  //   if (isConnected && socket && currentQuestion) {
-  //     socket.emit("answer-question", { answer });
-  //     setIsQuestionOpen(false);
-  //     setCurrentQuestion(null);
-  //   }
-  // };
+  const handleAnswerQuestion = (answer: string) => {
+    if (isConnected && socket && currentQuestion) {
+      socket.emit("answer-question", { answer });
+      setIsQuestionOpen(false);
+      setCurrentQuestion(null);
+    }
+  };
 
   const handleRollDice = () => {
     if (!socket || !isConnected || !canRollDice) return;
-    
-    socket.emit('shake-dice');
+
+    socket.emit("shake-dice");
   };
 
   return (
     <div>
-
       <JoinGame />
-      {currentQuestion&& (
+
+      <AlertDialog open={isQuestionOpen} onOpenChange={setIsQuestionOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Answer the Question</AlertDialogTitle>
+          </AlertDialogHeader>
+          {currentQuestion && (
+            <div className="space-y-4">
+              <AlertDialogDescription className="text-sm">{currentQuestion.text}</AlertDialogDescription>
+              <div className="space-y-2">
+                {currentQuestion.answers.map((answer, index) => (
+                  <button
+                    key={index}
+                    className="w-full p-2 bg-gray-100 rounded hover:bg-gray-200"
+                    onClick={() => handleAnswerQuestion(answer)}
+                  >
+                    {answer}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {currentQuestion && currentTurnPlayer?.id !== currentPlayer?.id && (
         <div className="fixed top-4 right-4 z-50 max-w-md">
           <Card>
             <CardHeader>
@@ -121,10 +196,7 @@ function Index() {
               <p className="text-sm mb-4">{currentQuestion.text}</p>
               <div className="space-y-2">
                 {currentQuestion.answers.map((answer, index) => (
-                  <div
-                    key={index}
-                    className="p-2 bg-gray-100 rounded text-sm"
-                  >
+                  <div key={index} className="p-2 bg-gray-100 rounded text-sm">
                     {answer}
                   </div>
                 ))}
@@ -148,7 +220,7 @@ function Index() {
             />
           </div>
           <div className="flex flex-col gap-6">
-            <GameControls 
+            <GameControls
               whoIsCurrentPlayer={currentTurnPlayer || undefined}
               isCurrentPlayerTurn={currentTurnPlayer?.id === currentPlayer?.id}
               isDiceShaking={isDiceShaking}

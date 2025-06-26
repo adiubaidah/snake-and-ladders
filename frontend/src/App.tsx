@@ -6,6 +6,7 @@ import SocketProvider from "./provider/socket";
 const Question = lazy(() => import("./pages/question/question"));
 const Game = lazy(() => import("./pages/game/index"));
 import StartGame from "@/pages/admin/start-game";
+import { PlayerProvider } from "./hooks/use-current-player";
 
 function App() {
   return (
@@ -17,7 +18,9 @@ function App() {
               path="/game"
               element={
                 <SocketProvider>
-                  <Game />
+                  <PlayerProvider>
+                    <Game />
+                  </PlayerProvider>
                 </SocketProvider>
               }
             />

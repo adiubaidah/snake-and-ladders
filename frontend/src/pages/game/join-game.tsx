@@ -51,7 +51,6 @@ function JoinGame() {
     socket.on("joined-game", (data: Player) => {
       setIsOpen(false);
       setPlayer(data);
-      console.log(`Player ${data.name} has joined the game.`);
     });
 
     return () => {
@@ -59,7 +58,7 @@ function JoinGame() {
       setIsJoined(false);
       setIsOpen(false);
     };
-  }, [isConnected, socket, isJoined]);
+  }, [isConnected, socket]);
 
   const onSubmit = (data: PlayerName) => {
     if (isConnected) {

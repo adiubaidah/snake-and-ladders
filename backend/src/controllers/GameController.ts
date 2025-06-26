@@ -200,4 +200,29 @@ export class GameController {
     
     return special;
   }
+
+    public getPlayers = (req: Request, res: Response): void => {
+      try {
+        const playersData = Array.from(this.gameManager['gameState'].players.values()).map(player => {
+          const playerInfo = player.getInfo();
+          return {
+            id: playerInfo.id,
+            name: playerInfo.name,
+            position: playerInfo.position,
+            coordinates: this.getSquareCoordinates(playerInfo.position),
+            color: playerInfo.color,
+            isCurrentPlayer: playerInfo.name === this.gameManager['gameState'].getCurrentPlayer()?.name
+          };
+        });
+  
+        res.status(200).json({
+          players: playersData,
+          currentPlayerId: this.gameManager['gameState'].getCurrentPlayer()?.id || null
+        });
+      } catch (error) {
+        res.status(500).json({
+          error: error instanceof Error ? error.message : "Unknown error"
+        });
+      }
+    };
 }
