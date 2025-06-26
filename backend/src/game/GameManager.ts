@@ -15,6 +15,7 @@ export class GameManager {
   private io: any;
   private questionService: QuestionService;
   private gameState: GameState;
+  private diceTimeouts: Map<string, NodeJS.Timeout> = new Map();
 
   constructor(io: any, questionService: QuestionService) {
     this.io = io;
@@ -35,7 +36,26 @@ export class GameManager {
     socket: Socket<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, any>,
     playerName: string
   ): Promise<void> {
-    const player = new Player(socket.id, playerName);
+    // Validate player name is not empty
+    if (!playerName || playerName.trim().length === 0) {
+      socket.emit("game-error", {
+        message: "Player name cannot be empty",
+      });
+      return;
+    }
+
+    // Check if player name is already taken
+    const existingPlayer = Array.from(this.gameState.players.values())
+      .find(player => player.name.toLowerCase() === playerName.trim().toLowerCase());
+    
+    if (existingPlayer) {
+      socket.emit("game-error", {
+        message: "Player name already taken. Please choose a different name.",
+      });
+      return;
+    }
+
+    const player = new Player(socket.id, playerName.trim());
 
     this.gameState.addPlayer(player);
 
@@ -54,6 +74,13 @@ export class GameManager {
     const player = this.gameState.players.get(socket.id);
     if (!player) return;
 
+    // Clear any pending dice timeout for this player
+    const timeout = this.diceTimeouts.get(socket.id);
+    if (timeout) {
+      clearTimeout(timeout);
+      this.diceTimeouts.delete(socket.id);
+    }
+
     this.gameState.removePlayer(socket.id);
     this.broadcastMessage({
       type: "PLAYER_LEFT",
@@ -70,16 +97,24 @@ export class GameManager {
       return;
     }
 
+    // Set the admin who started the game
+    this.gameState.setAdmin(socket.id);
+    
     this.gameState.startGame();
     this.broadcastMessage({
       type: "GAME_STARTED",
       playerCount: this.gameState.players.size,
     });
     this.broadcastGameState();
+    
     this.startPlayerTurn();
   }
 
   public restartGame(socket: any): void {
+    // Clear all dice timeouts
+    this.diceTimeouts.forEach(timeout => clearTimeout(timeout));
+    this.diceTimeouts.clear();
+
     this.broadcastMessage({
       type: "GAME_RESTARTED",
       message: "Game has been restarted by admin",
@@ -105,28 +140,39 @@ export class GameManager {
       });
       return;
     }
-  
+
+    // Clear any existing timeout for this player
+    const existingTimeout = this.diceTimeouts.get(socket.id);
+    if (existingTimeout) {
+      clearTimeout(existingTimeout);
+      this.diceTimeouts.delete(socket.id);
+    }
+
+    this.performDiceRoll(currentPlayer);
+  }
+
+  private performDiceRoll(player: Player): void {
     const diceValue = this.gameState.rollDice();
   
     this.broadcastMessage({
       type: "DICE_SHAKING",
-      player: currentPlayer.getInfo(),
+      player: player.getInfo(),
     });
   
     setTimeout(() => {
       this.broadcastMessage({
         type: "DICE_ROLLED",
-        player: currentPlayer.getInfo(),
+        player: player.getInfo(),
         diceValue: diceValue,
       });
       
       // Check if player will land on ladder or snake
-      const targetPosition = currentPlayer.position + diceValue;
+      const targetPosition = player.position + diceValue;
       const hasLadderOrSnake = this.gameState.ladders.has(targetPosition) || this.gameState.snakes.has(targetPosition);
       
       if (hasLadderOrSnake) {
         // Skip question and move directly
-        this.movePlayerWithAnimation(currentPlayer, diceValue);
+        this.movePlayerWithAnimation(player, diceValue);
       } else {
         // Present question as normal
         this.presentQuestion();
@@ -270,6 +316,12 @@ export class GameManager {
     const currentPlayer = this.gameState.getCurrentPlayer();
     if (!currentPlayer) return;
 
+    // Clear any existing timeout
+    const existingTimeout = this.diceTimeouts.get(currentPlayer.id);
+    if (existingTimeout) {
+      clearTimeout(existingTimeout);
+    }
+
     // Broadcast to all players that a turn has started
     this.broadcastMessage({
       type: "TURN_STARTED",
@@ -285,6 +337,21 @@ export class GameManager {
       timestamp: new Date().toISOString(),
     });
 
+    // Set timeout for automatic dice roll (6 seconds)
+    const timeout = setTimeout(() => {
+      console.log(`Auto-rolling dice for player ${currentPlayer.name} due to timeout`);
+      
+      this.broadcastMessage({
+        type: "AUTO_DICE_ROLL",
+        player: currentPlayer.getInfo(),
+        message: `${currentPlayer.name} took too long. Auto-rolling dice...`,
+      });
+
+      this.performDiceRoll(currentPlayer);
+      this.diceTimeouts.delete(currentPlayer.id);
+    }, 6000);
+
+    this.diceTimeouts.set(currentPlayer.id, timeout);
     this.broadcastGameState();
   }
 

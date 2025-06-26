@@ -16,6 +16,7 @@ export class GameState {
   public diceValue: number = 0;
   public turnOrder: string[] = [];
   public winner: Player | null = null;
+  public adminId: string | null = null;
   
   public ladders: Map<number, number> = new Map([
     [4, 14], [9, 31], [7, 17], [20, 38], [28, 84], [40, 59], [51, 67], [63, 81], [71, 91]
@@ -35,6 +36,14 @@ export class GameState {
     if (this.turnOrder.length === 0) {
       this.status = GameStatus.WAITING;
     }
+  }
+
+  public setAdmin(playerId: string): void {
+    this.adminId = playerId;
+  }
+
+  public isAdmin(playerId: string): boolean {
+    return this.adminId === playerId;
   }
 
   public startGame(): void {
@@ -122,7 +131,8 @@ export class GameState {
       currentQuestion: this.currentQuestion,
       waitingForAnswer: this.waitingForAnswer,
       diceValue: this.diceValue,
-      winner: this.winner?.name || null
+      winner: this.winner?.name || null,
+      hasAdmin: this.adminId !== null
     };
   }
 }

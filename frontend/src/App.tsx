@@ -5,13 +5,15 @@ import SocketProvider from "./provider/socket";
 
 const Question = lazy(() => import("./pages/question/question"));
 const Game = lazy(() => import("./pages/game/index"));
-import StartGame from "@/pages/admin/start-game";
+const Admin = lazy(() => import("./pages/admin/index"));
 import { PlayerProvider } from "./hooks/use-current-player";
+import { Toaster } from "sonner";
 
 function App() {
   return (
     <ReactQuery>
       <Suspense fallback={<div>Loading...</div>}>
+      <Toaster richColors />
         <Router>
           <Routes>
             <Route
@@ -29,7 +31,7 @@ function App() {
               path="/admin/mulai"
               element={
                 <SocketProvider>
-                  <StartGame />
+                  <Admin />
                 </SocketProvider>
               }
             />
