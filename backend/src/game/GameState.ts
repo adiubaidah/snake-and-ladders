@@ -22,7 +22,7 @@ export class GameState {
   ]);
   
   public snakes: Map<number, number> = new Map([
-    [99, 78], [95, 75], [92, 88], [87, 24], [64, 60], [62, 19], [56, 53], [49, 11], [48, 26], [16, 6]
+  [64, 60], [62, 19], [56, 53], [49, 11], [48, 26], [16, 6]
   ]);
 
   public addPlayer(player: Player): void {

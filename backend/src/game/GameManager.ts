@@ -98,31 +98,41 @@ export class GameManager {
       socket.emit("game-error", { message: "Not your turn" });
       return;
     }
-
+  
     if (this.gameState.waitingForAnswer) {
       socket.emit("game-error", {
         message: "Already shook dice, answer the question",
       });
       return;
     }
-
+  
     const diceValue = this.gameState.rollDice();
-
+  
     this.broadcastMessage({
       type: "DICE_SHAKING",
       player: currentPlayer.getInfo(),
     });
-
+  
     setTimeout(() => {
       this.broadcastMessage({
         type: "DICE_ROLLED",
         player: currentPlayer.getInfo(),
         diceValue: diceValue,
       });
-      this.presentQuestion();
+      
+      // Check if player will land on ladder or snake
+      const targetPosition = currentPlayer.position + diceValue;
+      const hasLadderOrSnake = this.gameState.ladders.has(targetPosition) || this.gameState.snakes.has(targetPosition);
+      
+      if (hasLadderOrSnake) {
+        // Skip question and move directly
+        this.movePlayerWithAnimation(currentPlayer, diceValue);
+      } else {
+        // Present question as normal
+        this.presentQuestion();
+      }
     }, 1000);
   }
-
   public async answerQuestion(socket: any, answer: string): Promise<void> {
     const currentPlayer = this.gameState.getCurrentPlayer();
     if (!currentPlayer || currentPlayer.id !== socket.id) {
